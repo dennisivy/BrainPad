@@ -38,7 +38,13 @@ Or browse all releases: [Releases Page](https://github.com/dennisivy/BrainPad/re
 1. Download the `.dmg` file from the link above
 2. Double-click the `.dmg` file to open it
 3. Drag the **Brain Pad** app to your **Applications** folder
-4. Open Brain Pad from Applications (you may need to right-click → Open the first time due to macOS security)
+4. **Important: First launch security step**
+   - Don't double-click the app directly (macOS will block it)
+   - Instead, **right-click** (or Control+click) on **Brain Pad** and select **"Open"**
+   - Click **"Open"** in the security dialog that appears
+   - You only need to do this once — future launches will work normally
+
+> **Why this happens:** The app isn't signed with an Apple Developer certificate yet. The app is safe — you can review the source code in this repo.
 
 #### Windows Installation
 
