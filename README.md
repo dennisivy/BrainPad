@@ -26,12 +26,12 @@ A local-first markdown note-taking desktop app. Your notes are stored as plain `
 
 | Platform | Download |
 |----------|----------|
-| **macOS (Apple Silicon)** | [Brain Pad_0.1.0_aarch64.dmg](https://github.com/dennisivy/Brain-Pad/releases/download/v0.1.0/Brain.Pad_0.1.0_aarch64.dmg) |
+| **macOS (Apple Silicon)** | [Brain Pad_0.1.0_aarch64.dmg](https://github.com/dennisivy/BrainPad/releases/download/v0.1.0/Brain.Pad_0.1.0_aarch64.dmg) |
 | **macOS (Intel)** | Coming soon |
 | **Windows** | Coming soon |
 | **Linux** | Coming soon |
 
-Or browse all releases: [Releases Page](https://github.com/dennisivy/Brain-Pad/releases)
+Or browse all releases: [Releases Page](https://github.com/dennisivy/BrainPad/releases)
 
 #### macOS Installation
 
@@ -66,7 +66,7 @@ Or browse all releases: [Releases Page](https://github.com/dennisivy/Brain-Pad/r
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/dennisivy/Brain-Pad.git
+   git clone https://github.com/dennisivy/BrainPad.git
    cd Brain-Pad
    ```
 
