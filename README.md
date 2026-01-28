@@ -27,7 +27,7 @@ A local-first markdown note-taking desktop app. Your notes are stored as plain `
 | Platform | Download |
 |----------|----------|
 | **macOS (Apple Silicon)** | [Brain Pad_0.1.0_aarch64.dmg](https://github.com/dennisivy/BrainPad/releases/download/v0.1.0/Brain.Pad_0.1.0_aarch64.dmg) |
-| **macOS (Intel)** | Coming soon |
+| **macOS (Intel)** | [Brain Pad_0.1.0_x64.dmg](https://github.com/dennisivy/BrainPad/releases/download/v0.1.0/Brain.Pad_0.1.0_x64.dmg) |
 | **Windows** | Coming soon |
 | **Linux** | Coming soon |
 
