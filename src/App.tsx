@@ -2,8 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import './App.css'
 import { FolderPicker } from './components/FolderPicker'
 import { Sidebar } from './components/Sidebar'
-import { Editor } from './components/Editor'
-import { Preview } from './components/Preview'
+import { MilkdownEditor } from './components/MilkdownEditor'
 import { NewNoteModal } from './components/NewNoteModal'
 import { useNotes } from './hooks/useNotes'
 import { useAutoSave } from './hooks/useAutoSave'
@@ -140,12 +139,11 @@ function App() {
         onChangeFolder={handleChangeFolder}
         isLoading={notesLoading}
       />
-      <Editor
+      <MilkdownEditor
         content={activeNote?.content ?? ''}
         onChange={updateNoteContent}
         disabled={!activeNote}
       />
-      <Preview content={activeNote?.content ?? ''} />
       {isSaving && <div className="save-indicator">Saving...</div>}
       {error && (
         <div className="error-toast">
