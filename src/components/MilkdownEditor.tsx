@@ -1,12 +1,11 @@
 import { useRef, useEffect } from 'react'
-import { Editor, rootCtx, defaultValueCtx, editorViewCtx } from '@milkdown/core'
-import { commonmark, codeBlockSchema } from '@milkdown/preset-commonmark'
+import { Editor, rootCtx, defaultValueCtx } from '@milkdown/core'
+import { commonmark } from '@milkdown/preset-commonmark'
 import { gfm } from '@milkdown/preset-gfm'
 import { nord } from '@milkdown/theme-nord'
 import { replaceAll, $prose } from '@milkdown/utils'
 import { listener, listenerCtx } from '@milkdown/plugin-listener'
-import { Plugin, PluginKey } from '@milkdown/prose/state'
-import { keymap } from '@milkdown/prose/keymap'
+import { Plugin, PluginKey, TextSelection } from '@milkdown/prose/state'
 
 import '@milkdown/theme-nord/style.css'
 
@@ -23,7 +22,7 @@ const exitCodeBlockPlugin = $prose(() => {
     props: {
       handleKeyDown(view, event) {
         const { state } = view
-        const { selection, doc } = state
+        const { selection } = state
         const { $from } = selection
 
         // Check if we're in a code block
@@ -34,7 +33,7 @@ const exitCodeBlockPlugin = $prose(() => {
         if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
           const endPos = $from.end($from.depth - 1)
           const tr = state.tr.insert(endPos, state.schema.nodes.paragraph.create())
-          tr.setSelection(state.selection.constructor.near(tr.doc.resolve(endPos + 1)))
+          tr.setSelection(TextSelection.near(tr.doc.resolve(endPos + 1)))
           view.dispatch(tr)
           return true
         }
@@ -53,7 +52,7 @@ const exitCodeBlockPlugin = $prose(() => {
             const tr = state.tr
             tr.delete($from.pos - 1, $from.pos) // Remove the empty line
             tr.insert(endPos - 1, state.schema.nodes.paragraph.create())
-            tr.setSelection(state.selection.constructor.near(tr.doc.resolve(endPos)))
+            tr.setSelection(TextSelection.near(tr.doc.resolve(endPos)))
             view.dispatch(tr)
             return true
           }
@@ -69,7 +68,7 @@ const exitCodeBlockPlugin = $prose(() => {
 const trailingParagraphPlugin = $prose(() => {
   return new Plugin({
     key: new PluginKey('trailing-paragraph'),
-    appendTransaction(transactions, oldState, newState) {
+    appendTransaction(_transactions, _oldState, newState) {
       const lastNode = newState.doc.lastChild
       if (lastNode && lastNode.type.name !== 'paragraph') {
         const tr = newState.tr

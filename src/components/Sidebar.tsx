@@ -6,7 +6,7 @@ interface SidebarProps {
   activeNotePath: string | null
   onSelectNote: (path: string) => void
   onNewNote: () => void
-  onRenameNote: (path: string, newFilename: string) => void
+  onOpenRenameModal: (path: string, currentName: string) => void
   onDeleteNote: (path: string) => void
   onRefresh: () => void
   onChangeFolder: () => void
@@ -18,7 +18,7 @@ export function Sidebar({
   activeNotePath,
   onSelectNote,
   onNewNote,
-  onRenameNote,
+  onOpenRenameModal,
   onDeleteNote,
   onRefresh,
   onChangeFolder,
@@ -36,10 +36,7 @@ export function Sidebar({
     const note = notes.find(n => n.path === contextMenu.path)
     if (!note) return
 
-    const newName = prompt('Rename note:', note.filename.replace('.md', ''))
-    if (newName && newName.trim()) {
-      onRenameNote(contextMenu.path, newName.trim())
-    }
+    onOpenRenameModal(contextMenu.path, note.filename)
     setContextMenu(null)
   }
 
