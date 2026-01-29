@@ -2,6 +2,8 @@
 
 A local-first markdown note-taking desktop app. Your notes are stored as plain `.md` files on your filesystem — no cloud, no database, fully offline.
 
+![Brain Pad Screenshot](assets/screenshot.png)
+
 ## Features
 
 - **Local-first storage** — Notes are plain `.md` files you own and control
@@ -9,6 +11,7 @@ A local-first markdown note-taking desktop app. Your notes are stored as plain `
 - **Auto-save** — Changes are automatically saved after 500ms of inactivity
 - **Keyboard shortcuts** — `Cmd/Ctrl + N` for new note, `Cmd/Ctrl + S` for manual save
 - **Dark theme** — Easy on the eyes
+- **Code syntax highlighting** — Language picker for code blocks with 20+ languages
 - **Context menu** — Right-click notes to rename or delete
 - **Folder selection** — Choose any folder on your system to store notes
 - **Cross-platform** — Works on macOS, Windows, and Linux
@@ -17,7 +20,6 @@ A local-first markdown note-taking desktop app. Your notes are stored as plain `
 
 - **AI integration** — Chat with your files and folders using AI
 - **Inline markdown preview** — Better editing experience with live inline formatting
-- **Code syntax highlighting** — Improved code block rendering with syntax colors
 - **Mobile app** — Native iOS and Android versions
 
 ## Installation
@@ -26,8 +28,8 @@ A local-first markdown note-taking desktop app. Your notes are stored as plain `
 
 | Platform | Download |
 |----------|----------|
-| **macOS (Apple Silicon)** | [Brain Pad_0.1.0_aarch64.dmg](https://github.com/dennisivy/BrainPad/releases/download/v0.1.0/Brain.Pad_0.1.0_aarch64.dmg) |
-| **macOS (Intel)** | [Brain Pad_0.1.0_x64.dmg](https://github.com/dennisivy/BrainPad/releases/download/v0.1.0/Brain.Pad_0.1.0_x64.dmg) |
+| **macOS (Apple Silicon)** | [Brain Pad_0.1.1_aarch64.dmg](https://github.com/dennisivy/BrainPad/releases/download/v0.1.1/Brain.Pad_0.1.1_aarch64.dmg) |
+| **macOS (Intel)** | [Brain Pad_0.1.1_x64.dmg](https://github.com/dennisivy/BrainPad/releases/download/v0.1.1/Brain.Pad_0.1.1_x64.dmg) |
 | **Windows** | Coming soon |
 | **Linux** | Coming soon |
 
@@ -92,7 +94,7 @@ Or browse all releases: [Releases Page](https://github.com/dennisivy/BrainPad/re
    ```
 
 5. Find your built app:
-   - **macOS**: `src-tauri/target/release/bundle/dmg/Brain Pad_0.1.0_aarch64.dmg`
+   - **macOS**: `src-tauri/target/release/bundle/dmg/Brain Pad_0.1.1_aarch64.dmg`
    - **Windows**: `src-tauri/target/release/bundle/msi/`
    - **Linux**: `src-tauri/target/release/bundle/appimage/` or `deb/`
 
