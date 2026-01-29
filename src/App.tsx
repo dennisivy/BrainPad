@@ -4,6 +4,7 @@ import { FolderPicker } from './components/FolderPicker'
 import { Sidebar } from './components/Sidebar'
 import { MilkdownEditor } from './components/MilkdownEditor'
 import { NewNoteModal } from './components/NewNoteModal'
+import { RenameNoteModal } from './components/RenameNoteModal'
 import { useNotes } from './hooks/useNotes'
 import { useAutoSave } from './hooks/useAutoSave'
 import { loadSettings, saveNote, selectFolder, saveSettings } from './utils/fileSystem'
@@ -13,6 +14,11 @@ function App() {
   const [isLoading, setIsLoading] = useState(true)
   const [lastOpenedNote, setLastOpenedNote] = useState<string | null>(null)
   const [isNewNoteModalOpen, setIsNewNoteModalOpen] = useState(false)
+  const [renameModal, setRenameModal] = useState<{ isOpen: boolean; path: string; currentName: string }>({
+    isOpen: false,
+    path: '',
+    currentName: ''
+  })
 
   const {
     notes,
@@ -72,6 +78,16 @@ function App() {
   const handleNewNote = useCallback(() => {
     setIsNewNoteModalOpen(true)
   }, [])
+
+  const handleOpenRenameModal = useCallback((path: string, currentName: string) => {
+    setRenameModal({ isOpen: true, path, currentName })
+  }, [])
+
+  const handleRenameNote = useCallback((newFilename: string) => {
+    if (renameModal.path) {
+      renameNote(renameModal.path, newFilename)
+    }
+  }, [renameModal.path, renameNote])
 
   const handleManualSave = useCallback(async () => {
     if (activeNote?.path && activeNote?.content !== undefined) {
@@ -133,7 +149,7 @@ function App() {
         activeNotePath={activeNote?.path ?? null}
         onSelectNote={selectNote}
         onNewNote={handleNewNote}
-        onRenameNote={renameNote}
+        onOpenRenameModal={handleOpenRenameModal}
         onDeleteNote={deleteNote}
         onRefresh={loadNotes}
         onChangeFolder={handleChangeFolder}
@@ -155,6 +171,12 @@ function App() {
         isOpen={isNewNoteModalOpen}
         onClose={() => setIsNewNoteModalOpen(false)}
         onSubmit={createNote}
+      />
+      <RenameNoteModal
+        isOpen={renameModal.isOpen}
+        currentName={renameModal.currentName}
+        onClose={() => setRenameModal({ isOpen: false, path: '', currentName: '' })}
+        onSubmit={handleRenameNote}
       />
     </div>
   )
