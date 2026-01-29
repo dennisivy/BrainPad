@@ -5,9 +5,193 @@ import { gfm } from '@milkdown/preset-gfm'
 import { nord } from '@milkdown/theme-nord'
 import { replaceAll, $prose } from '@milkdown/utils'
 import { listener, listenerCtx } from '@milkdown/plugin-listener'
+import { prism } from '@milkdown/plugin-prism'
 import { Plugin, PluginKey, TextSelection } from '@milkdown/prose/state'
+import type { EditorView } from '@milkdown/prose/view'
 
 import '@milkdown/theme-nord/style.css'
+
+// Supported languages for the dropdown
+const SUPPORTED_LANGUAGES = [
+  { value: '', label: 'Plain Text' },
+  { value: 'javascript', label: 'JavaScript' },
+  { value: 'typescript', label: 'TypeScript' },
+  { value: 'python', label: 'Python' },
+  { value: 'rust', label: 'Rust' },
+  { value: 'go', label: 'Go' },
+  { value: 'html', label: 'HTML' },
+  { value: 'css', label: 'CSS' },
+  { value: 'json', label: 'JSON' },
+  { value: 'markdown', label: 'Markdown' },
+  { value: 'bash', label: 'Bash' },
+  { value: 'sql', label: 'SQL' },
+  { value: 'java', label: 'Java' },
+  { value: 'c', label: 'C' },
+  { value: 'cpp', label: 'C++' },
+  { value: 'csharp', label: 'C#' },
+  { value: 'php', label: 'PHP' },
+  { value: 'ruby', label: 'Ruby' },
+  { value: 'swift', label: 'Swift' },
+  { value: 'yaml', label: 'YAML' },
+]
+
+// Plugin to show language picker for code blocks on hover
+const codeBlockLanguagePlugin = $prose(() => {
+  return new Plugin({
+    key: new PluginKey('code-block-language'),
+    view(editorView: EditorView) {
+      // Create dropdown and append to body for proper layering
+      const dropdown = document.createElement('div')
+      dropdown.className = 'code-block-language-picker'
+      dropdown.style.display = 'none'
+
+      const select = document.createElement('select')
+      select.className = 'language-select'
+
+      SUPPORTED_LANGUAGES.forEach(lang => {
+        const option = document.createElement('option')
+        option.value = lang.value
+        option.textContent = lang.label
+        select.appendChild(option)
+      })
+
+      dropdown.appendChild(select)
+      document.body.appendChild(dropdown)
+
+      let currentPre: HTMLElement | null = null
+      let currentPos: number | null = null
+
+      // Find all code block positions in the document
+      function findCodeBlockPositions(): Map<HTMLElement, number> {
+        const positions = new Map<HTMLElement, number>()
+        const { doc } = editorView.state
+
+        doc.descendants((node, pos) => {
+          if (node.type.name === 'code_block') {
+            try {
+              const dom = editorView.nodeDOM(pos)
+              if (dom instanceof HTMLElement) {
+                positions.set(dom, pos)
+              }
+            } catch {
+              // Ignore errors
+            }
+          }
+          return true
+        })
+
+        return positions
+      }
+
+      function positionDropdown(pre: HTMLElement) {
+        const rect = pre.getBoundingClientRect()
+        dropdown.style.position = 'fixed'
+        dropdown.style.top = `${rect.top + 8}px`
+        dropdown.style.right = `${window.innerWidth - rect.right + 8}px`
+        dropdown.style.display = 'block'
+      }
+
+      // Handle language change
+      select.addEventListener('change', () => {
+        if (currentPos === null) return
+
+        const node = editorView.state.doc.nodeAt(currentPos)
+        if (node && node.type.name === 'code_block') {
+          const tr = editorView.state.tr.setNodeMarkup(currentPos, undefined, {
+            ...node.attrs,
+            language: select.value
+          })
+          editorView.dispatch(tr)
+        }
+      })
+
+      // Keep dropdown open while interacting
+      let isInteracting = false
+      select.addEventListener('mousedown', () => { isInteracting = true })
+      select.addEventListener('change', () => { isInteracting = false })
+      select.addEventListener('blur', () => {
+        isInteracting = false
+        dropdown.style.display = 'none'
+        currentPre = null
+      })
+
+      // Show dropdown on hover
+      const handleMouseOver = (e: Event) => {
+        if (isInteracting) return
+
+        const target = e.target as HTMLElement
+        const pre = target.closest('pre') as HTMLElement | null
+
+        if (pre && pre !== currentPre) {
+          const positions = findCodeBlockPositions()
+          const pos = positions.get(pre)
+
+          if (pos !== undefined) {
+            const node = editorView.state.doc.nodeAt(pos)
+            if (node) {
+              currentPos = pos
+              currentPre = pre
+              select.value = node.attrs.language || ''
+              positionDropdown(pre)
+            }
+          }
+        }
+      }
+
+      const handleMouseOut = (e: Event) => {
+        if (isInteracting) return
+
+        const target = e.target as HTMLElement
+        const relatedTarget = (e as MouseEvent).relatedTarget as HTMLElement | null
+
+        // Check if we're leaving the pre element
+        const pre = target.closest('pre')
+        if (pre && relatedTarget && !pre.contains(relatedTarget) && !dropdown.contains(relatedTarget)) {
+          dropdown.style.display = 'none'
+          currentPre = null
+        }
+      }
+
+      // Keep visible when hovering the dropdown itself
+      dropdown.addEventListener('mouseenter', () => { isInteracting = true })
+      dropdown.addEventListener('mouseleave', () => {
+        if (!select.matches(':focus')) {
+          isInteracting = false
+          dropdown.style.display = 'none'
+          currentPre = null
+        }
+      })
+
+      editorView.dom.addEventListener('mouseover', handleMouseOver)
+      editorView.dom.addEventListener('mouseout', handleMouseOut)
+
+      return {
+        update() {
+          if (currentPos !== null && currentPre !== null && dropdown.style.display !== 'none') {
+            const positions = findCodeBlockPositions()
+            const newPos = positions.get(currentPre)
+            if (newPos !== undefined) {
+              currentPos = newPos
+              const node = editorView.state.doc.nodeAt(currentPos)
+              if (node && node.type.name === 'code_block') {
+                const lang = node.attrs.language || ''
+                if (select.value !== lang) {
+                  select.value = lang
+                }
+              }
+              positionDropdown(currentPre)
+            }
+          }
+        },
+        destroy() {
+          editorView.dom.removeEventListener('mouseover', handleMouseOver)
+          editorView.dom.removeEventListener('mouseout', handleMouseOut)
+          dropdown.remove()
+        }
+      }
+    }
+  })
+})
 
 interface MilkdownEditorProps {
   content: string
@@ -98,8 +282,10 @@ export function MilkdownEditor({ content, onChange, disabled }: MilkdownEditorPr
       .use(listener)
       .use(commonmark)
       .use(gfm)
+      .use(prism)
       .use(exitCodeBlockPlugin)
       .use(trailingParagraphPlugin)
+      .use(codeBlockLanguagePlugin)
 
     editor.create().then((instance) => {
       editorInstanceRef.current = instance
