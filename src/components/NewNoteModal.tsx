@@ -11,10 +11,13 @@ export function NewNoteModal({ isOpen, onClose, onSubmit }: NewNoteModalProps) {
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    if (isOpen) {
+    if (!isOpen) return
+
+    // Defer state updates to avoid synchronous setState-in-effect warnings.
+    setTimeout(() => {
       setFilename('')
-      setTimeout(() => inputRef.current?.focus(), 0)
-    }
+      inputRef.current?.focus()
+    }, 0)
   }, [isOpen])
 
   function handleSubmit(e: React.FormEvent) {

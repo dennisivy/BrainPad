@@ -12,14 +12,15 @@ export function RenameNoteModal({ isOpen, currentName, onClose, onSubmit }: Rena
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    if (isOpen) {
+    if (!isOpen) return
+
+    // Defer state updates to avoid synchronous setState-in-effect warnings.
+    setTimeout(() => {
       // Remove .md extension for editing
       setFilename(currentName.replace('.md', ''))
-      setTimeout(() => {
-        inputRef.current?.focus()
-        inputRef.current?.select()
-      }, 0)
-    }
+      inputRef.current?.focus()
+      inputRef.current?.select()
+    }, 0)
   }, [isOpen, currentName])
 
   function handleSubmit(e: React.FormEvent) {

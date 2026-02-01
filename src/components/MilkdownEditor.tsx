@@ -1,5 +1,5 @@
 import { useRef, useEffect } from 'react'
-import { Editor, rootCtx, defaultValueCtx } from '@milkdown/core'
+import { Editor, rootCtx, defaultValueCtx, editorViewCtx } from '@milkdown/core'
 import { commonmark } from '@milkdown/preset-commonmark'
 import { gfm } from '@milkdown/preset-gfm'
 import { nord } from '@milkdown/theme-nord'
@@ -7,7 +7,14 @@ import { replaceAll, $prose } from '@milkdown/utils'
 import { listener, listenerCtx } from '@milkdown/plugin-listener'
 import { prism } from '@milkdown/plugin-prism'
 import { Plugin, PluginKey, TextSelection } from '@milkdown/prose/state'
-import type { EditorView } from '@milkdown/prose/view'
+import type { EditorView, NodeView } from '@milkdown/prose/view'
+
+import { getCurrentWebview } from '@tauri-apps/api/webview'
+import type { DragDropEvent } from '@tauri-apps/api/webview'
+import { join } from '@tauri-apps/api/path'
+import { readFile } from '@tauri-apps/plugin-fs'
+
+import { importImageToMedia } from '../utils/fileSystem'
 
 import '@milkdown/theme-nord/style.css'
 
@@ -196,6 +203,7 @@ const codeBlockLanguagePlugin = $prose(() => {
 interface MilkdownEditorProps {
   content: string
   onChange: (content: string) => void
+  notesDirectory: string | null
   disabled?: boolean
 }
 
@@ -264,12 +272,155 @@ const trailingParagraphPlugin = $prose(() => {
   })
 })
 
-export function MilkdownEditor({ content, onChange, disabled }: MilkdownEditorProps) {
+function isRemoteUrl(src: string): boolean {
+  return /^(https?:)?\/\//.test(src)
+}
+
+function isAbsoluteFilePath(src: string): boolean {
+  // Windows drive, or Unix absolute
+  return /^[a-zA-Z]:[\\/]/.test(src) || src.startsWith('/')
+}
+
+function isRelativeImageSrc(src: string): boolean {
+  if (!src) return false
+  if (src.startsWith('data:') || src.startsWith('blob:')) return false
+  if (isRemoteUrl(src)) return false
+  if (isAbsoluteFilePath(src)) return false
+  return true
+}
+
+function mimeFromPath(path: string): string {
+  const clean = path.split('?')[0].split('#')[0]
+  const dot = clean.lastIndexOf('.')
+  const ext = dot >= 0 ? clean.slice(dot + 1).toLowerCase() : ''
+
+  switch (ext) {
+    case 'png':
+      return 'image/png'
+    case 'jpg':
+    case 'jpeg':
+      return 'image/jpeg'
+    case 'gif':
+      return 'image/gif'
+    case 'webp':
+      return 'image/webp'
+    case 'svg':
+      return 'image/svg+xml'
+    default:
+      return 'application/octet-stream'
+  }
+}
+
+const imageSrcResolverPlugin = (getNotesDirectory: () => string | null) =>
+  $prose(() => {
+    return new Plugin({
+      key: new PluginKey('image-src-resolver'),
+      props: {
+        nodeViews: {
+          image(node): NodeView {
+            const img = document.createElement('img')
+            img.draggable = false
+
+            let currentSrc: string | null = null
+            let currentObjectUrl: string | null = null
+            let loadToken = 0
+
+            const cleanupObjectUrl = () => {
+              if (currentObjectUrl) {
+                URL.revokeObjectURL(currentObjectUrl)
+                currentObjectUrl = null
+              }
+            }
+
+            const setSrc = async (src: string) => {
+              if (src === currentSrc) return
+              currentSrc = src
+              const token = ++loadToken
+
+              cleanupObjectUrl()
+
+              // Remote/data/blob URLs work as-is
+              if (!src || src.startsWith('data:') || src.startsWith('blob:') || isRemoteUrl(src)) {
+                if (src) img.src = src
+                return
+              }
+
+              // Resolve to absolute filesystem path
+              let absPath: string | null = null
+
+              if (isRelativeImageSrc(src)) {
+                const notesDir = getNotesDirectory()
+                if (!notesDir) {
+                  img.src = src
+                  return
+                }
+
+                const normalized = src.startsWith('./') ? src.slice(2) : src
+                absPath = await join(notesDir, normalized)
+              } else if (isAbsoluteFilePath(src)) {
+                absPath = src
+              } else {
+                // Unknown scheme; best effort.
+                img.src = src
+                return
+              }
+
+              try {
+                const bytes = await readFile(absPath)
+                const blob = new Blob([bytes], { type: mimeFromPath(absPath) })
+                const url = URL.createObjectURL(blob)
+
+                // If src changed while we were loading, discard.
+                if (token !== loadToken) {
+                  URL.revokeObjectURL(url)
+                  return
+                }
+
+                currentObjectUrl = url
+                img.src = url
+              } catch (err) {
+                console.error('Failed to load image for preview:', err)
+                img.src = src
+              }
+            }
+
+            img.alt = (node.attrs.alt as string | undefined) ?? ''
+            if (typeof node.attrs.title === 'string') {
+              img.title = node.attrs.title
+            }
+            void setSrc((node.attrs.src as string | undefined) ?? '')
+
+            return {
+              dom: img,
+              update(updatedNode) {
+                if (updatedNode.type !== node.type) return false
+
+                img.alt = (updatedNode.attrs.alt as string | undefined) ?? ''
+                if (typeof updatedNode.attrs.title === 'string') {
+                  img.title = updatedNode.attrs.title
+                }
+                void setSrc((updatedNode.attrs.src as string | undefined) ?? '')
+                return true
+              },
+              destroy() {
+                cleanupObjectUrl()
+              }
+            }
+          },
+        }
+      }
+    })
+  })
+
+export function MilkdownEditor({ content, onChange, notesDirectory, disabled }: MilkdownEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null)
   const editorInstanceRef = useRef<Editor | null>(null)
   const isUpdatingRef = useRef(false)
   const lastContentRef = useRef(content)
+  const notesDirectoryRef = useRef<string | null>(notesDirectory)
 
+  // Note: we intentionally only create/destroy the editor when `disabled` flips.
+  // Content changes are applied via `replaceAll` below.
   useEffect(() => {
     if (disabled || !editorRef.current) return
 
@@ -286,6 +437,7 @@ export function MilkdownEditor({ content, onChange, disabled }: MilkdownEditorPr
       .use(exitCodeBlockPlugin)
       .use(trailingParagraphPlugin)
       .use(codeBlockLanguagePlugin)
+      .use(imageSrcResolverPlugin(() => notesDirectoryRef.current))
 
     editor.create().then((instance) => {
       editorInstanceRef.current = instance
@@ -307,7 +459,14 @@ export function MilkdownEditor({ content, onChange, disabled }: MilkdownEditorPr
       editorInstanceRef.current?.destroy()
       editorInstanceRef.current = null
     }
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [disabled])
+
+  // Keep latest notes directory for image resolution + drag/drop.
+  useEffect(() => {
+    notesDirectoryRef.current = notesDirectory
+  }, [notesDirectory])
 
   // Update content when switching notes (from parent)
   useEffect(() => {
@@ -321,6 +480,95 @@ export function MilkdownEditor({ content, onChange, disabled }: MilkdownEditorPr
       }, 0)
     }
   }, [content])
+
+  useEffect(() => {
+    if (disabled) return
+
+    // Prevent the webview default drop behavior (e.g. opening the file).
+    const el = editorRef.current
+    if (!el) return
+
+    const prevent = (e: DragEvent) => {
+      e.preventDefault()
+    }
+
+    el.addEventListener('dragover', prevent)
+    el.addEventListener('drop', prevent)
+
+    return () => {
+      el.removeEventListener('dragover', prevent)
+      el.removeEventListener('drop', prevent)
+    }
+  }, [disabled])
+
+  useEffect(() => {
+    if (disabled) return
+
+    let unlisten: (() => void) | null = null
+
+    const insertImageAtCursor = (view: EditorView, src: string, alt: string) => {
+      const imageType = view.state.schema.nodes.image
+      if (!imageType) {
+        // Fallback: insert markdown text
+        view.dispatch(view.state.tr.insertText(`![](${src})`).scrollIntoView())
+        return
+      }
+
+      const imageNode = imageType.create({ src, alt, title: '' })
+      let tr = view.state.tr.replaceSelectionWith(imageNode)
+
+      const paragraphType = view.state.schema.nodes.paragraph
+      if (paragraphType) {
+        tr = tr.insert(tr.selection.to, paragraphType.create())
+      }
+
+      view.dispatch(tr.scrollIntoView())
+    }
+
+    async function start() {
+      try {
+        const webview = getCurrentWebview()
+        unlisten = await webview.onDragDropEvent(async (event) => {
+          const payload = event.payload as DragDropEvent
+          if (payload.type !== 'drop') return
+
+          const notesDir = notesDirectoryRef.current
+          const editorInstance = editorInstanceRef.current
+          if (!notesDir || !editorInstance) return
+
+          const imported = [] as { relativePath: string; alt: string }[]
+
+          for (const path of payload.paths) {
+            try {
+              const media = await importImageToMedia(notesDir, path)
+              imported.push({ relativePath: media.relativePath, alt: media.filename })
+            } catch (err) {
+              console.error('Failed to import dropped image:', err)
+            }
+          }
+
+          if (imported.length === 0) return
+
+          editorInstance.action((ctx) => {
+            const view = ctx.get(editorViewCtx) as EditorView
+            view.focus()
+            for (const img of imported) {
+              insertImageAtCursor(view, img.relativePath, img.alt)
+            }
+          })
+        })
+      } catch (err) {
+        // Likely not running inside Tauri (e.g. web preview). Ignore.
+        console.warn('Drag-drop events unavailable:', err)
+      }
+    }
+
+    start()
+
+    return () => {
+      void unlisten?.()
+    }
+  }, [disabled])
 
   if (disabled) {
     return (
