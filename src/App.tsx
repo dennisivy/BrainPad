@@ -144,6 +144,7 @@ function App() {
 
   return (
     <div className="app">
+      <div className="titlebar" data-tauri-drag-region />
       <Sidebar
         notes={notes}
         activeNotePath={activeNote?.path ?? null}

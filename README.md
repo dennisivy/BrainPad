@@ -2,7 +2,7 @@
 
 A local-first markdown note-taking desktop app. Your notes are stored as plain `.md` files on your filesystem — no cloud, no database, fully offline.
 
-![Brain Pad Screenshot](assets/screenshot.png)
+![Brain Pad Demo](assets/screenshot2.png)
 
 ## Features
 

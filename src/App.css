@@ -12,15 +12,33 @@ html, body, #root {
 .app {
   display: grid;
   grid-template-columns: 220px 1fr;
+  /* First row is a draggable titlebar strip (for macOS titleBarStyle: Overlay) */
+  grid-template-rows: 32px 1fr;
   height: 100vh;
-  background-color: #1a1a1a;
+  background: transparent;
   color: #e0e0e0;
+}
+
+/* Titlebar glass strip (sits behind macOS traffic lights) */
+.titlebar {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  height: 32px;
+  /* Subtle (barely purple, mostly dark glass) */
+  background: linear-gradient(135deg, var(--glass-tint), rgba(0, 0, 0, 0)), var(--glass-bg);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  border-bottom: 1px solid var(--glass-border);
 }
 
 /* Sidebar */
 .sidebar {
-  background-color: #252525;
-  border-right: 1px solid #333;
+  grid-row: 2;
+  /* Subtle (barely purple, mostly dark glass) */
+  background: linear-gradient(135deg, var(--glass-tint), rgba(0, 0, 0, 0)), var(--glass-bg-strong);
+  border-right: 1px solid var(--glass-border);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -125,9 +143,10 @@ html, body, #root {
 
 /* Editor */
 .editor {
+  grid-row: 2;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid #333;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
   overflow: hidden;
   /* Important for CSS grid/flex children: allow this column to shrink instead of
      expanding horizontally when content has long unbroken lines. */
@@ -188,7 +207,11 @@ kbd {
 
 /* Preview */
 .preview {
-  background-color: #1e1e1e;
+  grid-row: 2;
+  /* Subtle (barely purple, mostly dark glass) */
+  background: linear-gradient(135deg, var(--glass-tint), rgba(0, 0, 0, 0)), var(--glass-bg);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -233,7 +256,7 @@ kbd {
   align-items: center;
   justify-content: center;
   height: 100vh;
-  background-color: #1a1a1a;
+  background: transparent;
 }
 
 .folder-picker-content {
@@ -283,12 +306,12 @@ kbd {
 }
 
 button.primary {
-  background-color: #4a9eff;
+  background-color: var(--accent);
   color: #fff;
 }
 
 button.primary:hover {
-  background-color: #3a8eef;
+  background-color: var(--accent-hover);
 }
 
 button.large {
@@ -372,7 +395,7 @@ button.large {
 }
 
 .markdown-body a {
-  color: #4a9eff;
+  color: var(--accent);
   text-decoration: none;
 }
 
@@ -501,12 +524,14 @@ button.large {
 }
 
 .modal {
-  background-color: #2d2d2d;
-  border: 1px solid #444;
+  background: linear-gradient(135deg, rgba(167, 139, 250, 0.10), rgba(0, 0, 0, 0)), var(--surface);
+  border: 1px solid rgba(167, 139, 250, 0.14);
   border-radius: 8px;
   padding: 24px;
   min-width: 320px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
 }
 
 .modal h3 {
@@ -529,7 +554,8 @@ button.large {
 }
 
 .modal input[type="text"]:focus {
-  border-color: #4a9eff;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
 }
 
 .modal-actions {
@@ -557,13 +583,13 @@ button.large {
 }
 
 .modal-actions button[type="submit"] {
-  background-color: #4a9eff;
+  background-color: var(--accent);
   border: none;
   color: #fff;
 }
 
 .modal-actions button[type="submit"]:hover:not(:disabled) {
-  background-color: #3a8eef;
+  background-color: var(--accent-hover);
 }
 
 .modal-actions button[type="submit"]:disabled {
@@ -576,7 +602,10 @@ button.large {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background-color: #1e1e1e;
+  /* Subtle (barely purple, mostly dark glass) */
+  background: linear-gradient(135deg, var(--glass-tint), rgba(0, 0, 0, 0)), var(--glass-bg);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
 }
 
 /* Milkdown mounts into the `.milkdown-editor` div (see `src/components/MilkdownEditor.tsx`).
@@ -684,7 +713,7 @@ button.large {
 }
 
 .milkdown-wrapper .ProseMirror blockquote {
-  border-left: 4px solid #4a9eff;
+  border-left: 4px solid var(--accent);
   padding-left: 16px;
   margin: 16px 0;
   color: #999;
@@ -692,7 +721,7 @@ button.large {
 }
 
 .milkdown-wrapper .ProseMirror a {
-  color: #4a9eff;
+  color: var(--accent);
   text-decoration: none;
 }
 
