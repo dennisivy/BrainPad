@@ -28,8 +28,8 @@ A local-first markdown note-taking desktop app. Your notes are stored as plain `
 
 | Platform | Download |
 |----------|----------|
-| **macOS (Apple Silicon)** | [Brain Pad_0.1.1_aarch64.dmg](https://github.com/dennisivy/BrainPad/releases/download/v0.1.1/Brain%20Pad_0.1.1_aarch64.dmg) |
-| **macOS (Intel)** | [Brain Pad_0.1.1_x64.dmg](https://github.com/dennisivy/BrainPad/releases/download/v0.1.1/Brain%20Pad_0.1.1_x64.dmg) |
+| **macOS (Apple Silicon)** | [Brain Pad_0.1.2_aarch64.dmg](https://github.com/dennisivy/BrainPad/releases/download/v0.1.2/Brain%20Pad_0.1.2_aarch64.dmg) |
+| **macOS (Intel)** | [Brain Pad_0.1.2_x64.dmg](https://github.com/dennisivy/BrainPad/releases/download/v0.1.2/Brain%20Pad_0.1.2_x64.dmg) |
 | **Windows** | Coming soon |
 | **Linux** | Coming soon |
 
@@ -94,7 +94,7 @@ Or browse all releases: [Releases Page](https://github.com/dennisivy/BrainPad/re
    ```
 
 5. Find your built app:
-   - **macOS**: `src-tauri/target/release/bundle/dmg/Brain Pad_0.1.1_aarch64.dmg`
+- **macOS**: `src-tauri/target/release/bundle/dmg/Brain Pad_0.1.2_aarch64.dmg`
    - **Windows**: `src-tauri/target/release/bundle/msi/`
    - **Linux**: `src-tauri/target/release/bundle/appimage/` or `deb/`
 
