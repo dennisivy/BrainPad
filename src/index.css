@@ -5,12 +5,30 @@
 
   color-scheme: dark;
   color: rgba(255, 255, 255, 0.87);
-  background-color: #1a1a1a;
+  background-color: transparent;
+
+  /* Subtle theme (barely purple, mostly dark glass) */
+  --accent: #a78bfa;
+  --accent-hover: #9f7cff;
+  --accent-soft: rgba(167, 139, 250, 0.18);
+
+  --glass-bg: rgba(16, 18, 22, 0.30);
+  --glass-bg-strong: rgba(24, 26, 30, 0.38);
+  --glass-tint: rgba(167, 139, 250, 0.06);
+  --glass-border: rgba(255, 255, 255, 0.08);
+
+  --surface: rgba(18, 20, 24, 0.92);
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+html,
+body,
+#root {
+  background: transparent;
 }
 
 body {

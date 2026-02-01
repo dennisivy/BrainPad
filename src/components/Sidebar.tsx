@@ -58,10 +58,11 @@ export function Sidebar({
   return (
     <>
       <aside className="sidebar" onClick={handleCloseContextMenu}>
-        <div className="sidebar-header">
+        <div className="sidebar-header" data-tauri-drag-region>
           <h2>Notes</h2>
           <div className="sidebar-actions">
             <button
+              data-tauri-drag-region="false"
               onClick={(e) => { e.stopPropagation(); onRefresh() }}
               disabled={isLoading}
               title="Refresh notes"
@@ -70,6 +71,7 @@ export function Sidebar({
               ↻
             </button>
             <button
+              data-tauri-drag-region="false"
               onClick={(e) => { e.stopPropagation(); onNewNote() }}
               disabled={isLoading}
               title="New note"
