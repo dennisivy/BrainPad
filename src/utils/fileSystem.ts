@@ -1,11 +1,78 @@
 import { open } from '@tauri-apps/plugin-dialog'
-import { readDir, readTextFile, writeTextFile, exists, rename, remove } from '@tauri-apps/plugin-fs'
+import { readDir, readTextFile, writeTextFile, exists, rename, remove, copyFile, mkdir } from '@tauri-apps/plugin-fs'
 import { Store } from '@tauri-apps/plugin-store'
 import { join } from '@tauri-apps/api/path'
 import type { Note, AppSettings } from '../types'
 
 const SETTINGS_FILE = 'settings.json'
 let store: Store | null = null
+
+const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'])
+
+function basenameFromPath(path: string): string {
+  // Normalize Windows paths coming from drag/drop
+  const normalized = path.replace(/\\/g, '/')
+  const idx = normalized.lastIndexOf('/')
+  return idx >= 0 ? normalized.slice(idx + 1) : normalized
+}
+
+function splitNameAndExt(filename: string): { name: string; ext: string } {
+  const lastDot = filename.lastIndexOf('.')
+  if (lastDot <= 0 || lastDot === filename.length - 1) {
+    return { name: filename, ext: '' }
+  }
+  return {
+    name: filename.slice(0, lastDot),
+    ext: filename.slice(lastDot + 1).toLowerCase(),
+  }
+}
+
+function sanitizeFilename(name: string): string {
+  const sanitized = name
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-zA-Z0-9._-]/g, '')
+
+  return sanitized.length > 0 ? sanitized : 'image'
+}
+
+export interface ImportedMedia {
+  filename: string
+  relativePath: string
+  absolutePath: string
+}
+
+export async function importImageToMedia(notesDirectory: string, sourcePath: string): Promise<ImportedMedia> {
+  const mediaDir = await join(notesDirectory, 'media')
+  await mkdir(mediaDir, { recursive: true })
+
+  const original = basenameFromPath(sourcePath)
+  const { name, ext } = splitNameAndExt(original)
+
+  if (!ext || !IMAGE_EXTENSIONS.has(ext)) {
+    throw new Error(`Unsupported image type: ${ext || 'unknown'}`)
+  }
+
+  const safeBase = sanitizeFilename(name)
+
+  let i = 0
+  // Ensure we don't overwrite an existing file
+  while (true) {
+    const candidate = i === 0 ? `${safeBase}.${ext}` : `${safeBase}-${i}.${ext}`
+    const destPath = await join(mediaDir, candidate)
+
+    if (!(await exists(destPath))) {
+      await copyFile(sourcePath, destPath)
+      return {
+        filename: candidate,
+        relativePath: `media/${candidate}`,
+        absolutePath: destPath,
+      }
+    }
+
+    i++
+  }
+}
 
 async function getStore(): Promise<Store> {
   if (!store) {
