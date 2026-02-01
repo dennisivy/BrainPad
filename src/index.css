@@ -190,6 +190,25 @@ button:disabled {
   background: rgba(94, 129, 172, 0.35);
 }
 
+.image-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 22px;
+  transform: translateX(-50%);
+  z-index: 10001;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(46, 52, 64, 0.92);
+  border: 1px solid rgba(94, 129, 172, 0.55);
+  color: #eceff4;
+  font-size: 13px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  transition: opacity 200ms ease;
+  pointer-events: none;
+  max-width: min(560px, calc(100vw - 40px));
+  text-align: center;
+}
+
 .language-select {
   background-color: rgba(59, 66, 82, 0.9);
   color: #d8dee9;

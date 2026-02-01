@@ -205,6 +205,7 @@ interface MilkdownEditorProps {
   content: string
   onChange: (content: string) => void
   notesDirectory: string | null
+  notePath: string | null
   disabled?: boolean
 }
 
@@ -312,7 +313,20 @@ function mimeFromPath(path: string): string {
   }
 }
 
-const imageSrcResolverPlugin = (getNotesDirectory: () => string | null) =>
+type PendingMove = {
+  notePath: string
+  pos: number
+  attrs: { src: string; alt: string; title: string }
+  markdown: string
+}
+
+type ImageEnhancementsMeta =
+  | { type: 'setPendingMove'; pendingMove: PendingMove }
+  | { type: 'clearPendingMove' }
+
+const imageEnhancementsKey = new PluginKey<PendingMove | null>('image-enhancements')
+
+const imageSrcResolverPlugin = (getNotesDirectory: () => string | null, getNotePath: () => string | null) =>
   $prose(() => {
     const isFileDrop = (e: DragEvent) => {
       const dt = e.dataTransfer
@@ -359,6 +373,32 @@ const imageSrcResolverPlugin = (getNotesDirectory: () => string | null) =>
       return matches
     }
 
+    let toastFadeTimer: number | null = null
+    let toastRemoveTimer: number | null = null
+
+    const showToast = (message: string, durationMs = 2200) => {
+      let toast = document.querySelector<HTMLDivElement>('.image-toast')
+      if (!toast) {
+        toast = document.createElement('div')
+        toast.className = 'image-toast'
+        document.body.appendChild(toast)
+      }
+
+      if (toastFadeTimer) window.clearTimeout(toastFadeTimer)
+      if (toastRemoveTimer) window.clearTimeout(toastRemoveTimer)
+
+      toast.textContent = message
+      toast.style.opacity = '1'
+
+      toastFadeTimer = window.setTimeout(() => {
+        toast.style.opacity = '0'
+      }, Math.max(0, durationMs - 250))
+
+      toastRemoveTimer = window.setTimeout(() => {
+        toast.remove()
+      }, durationMs)
+    }
+
     // Popover state (single popover for the whole editor instance)
     let popover: HTMLDivElement | null = null
     let popoverCleanup: (() => void) | null = null
@@ -370,7 +410,7 @@ const imageSrcResolverPlugin = (getNotesDirectory: () => string | null) =>
       popover = null
     }
 
-    const openPopover = (rect: DOMRect, markdown: string) => {
+    const openPopover = (rect: DOMRect, markdown: string, onCopyRequested: (input: HTMLInputElement) => void) => {
       closePopover()
 
       const wrapper = document.createElement('div')
@@ -415,18 +455,8 @@ const imageSrcResolverPlugin = (getNotesDirectory: () => string | null) =>
         if (e.key === 'Escape') closePopover()
       }
 
-      const onCopy = async () => {
-        try {
-          await navigator.clipboard.writeText(markdown)
-        } catch {
-          input.focus()
-          input.select()
-          try {
-            document.execCommand('copy')
-          } catch {
-            // ignore
-          }
-        }
+      const onCopy = () => {
+        onCopyRequested(input)
       }
 
       copyBtn.addEventListener('click', onCopy)
@@ -442,7 +472,37 @@ const imageSrcResolverPlugin = (getNotesDirectory: () => string | null) =>
     }
 
     return new Plugin({
-      key: new PluginKey('image-enhancements'),
+      key: imageEnhancementsKey,
+      state: {
+        init(): PendingMove | null {
+          return null
+        },
+        apply(tr, prev: PendingMove | null, _oldState, newState): PendingMove | null {
+          const meta = tr.getMeta(imageEnhancementsKey) as ImageEnhancementsMeta | undefined
+          if (meta?.type === 'setPendingMove') return meta.pendingMove
+          if (meta?.type === 'clearPendingMove') return null
+
+          if (!prev) return null
+
+          // Map position through document changes.
+          if (tr.docChanged) {
+            const mapped = tr.mapping.mapResult(prev.pos)
+            if (mapped.deleted) return null
+
+            const node = newState.doc.nodeAt(mapped.pos)
+            if (!node || node.type.name !== 'image') return null
+
+            const attrs = node.attrs as { src?: string; alt?: string; title?: string }
+            if ((attrs.src ?? '') !== prev.attrs.src) return null
+            if ((attrs.alt ?? '') !== prev.attrs.alt) return null
+            if ((attrs.title ?? '') !== prev.attrs.title) return null
+
+            return { ...prev, pos: mapped.pos }
+          }
+
+          return prev
+        },
+      },
       props: {
         handleDOMEvents: {
           // Block ProseMirror + webview default handling for OS file drops.
@@ -463,6 +523,16 @@ const imageSrcResolverPlugin = (getNotesDirectory: () => string | null) =>
             return false
           },
         },
+        handleKeyDown(view, event) {
+          if (event.key !== 'Escape') return false
+
+          const pending = imageEnhancementsKey.getState(view.state)
+          if (!pending) return false
+
+          view.dispatch(view.state.tr.setMeta(imageEnhancementsKey, { type: 'clearPendingMove' } satisfies ImageEnhancementsMeta))
+          showToast('Canceled image move')
+          return true
+        },
         handlePaste(view, event) {
           // Don’t transform paste inside code blocks.
           if (view.state.selection.$from.parent.type.name === 'code_block') return false
@@ -476,6 +546,49 @@ const imageSrcResolverPlugin = (getNotesDirectory: () => string | null) =>
           const imageType = view.state.schema.nodes.image
           if (!imageType) return false
 
+          const pending = imageEnhancementsKey.getState(view.state)
+          const notePath = getNotePath()
+
+          // If user just copied an image and pastes the exact same markdown in the same note,
+          // treat this as a move (delete original, insert at cursor).
+          if (
+            pending &&
+            notePath &&
+            pending.notePath === notePath &&
+            images.length === 1 &&
+            pending.markdown === buildImageMarkdown(images[0])
+          ) {
+            const { from, to } = view.state.selection
+            const nodeAtPos = view.state.doc.nodeAt(pending.pos)
+
+            if (nodeAtPos && nodeAtPos.type.name === 'image') {
+              let tr = view.state.tr
+
+              // Delete original image
+              tr = tr.delete(pending.pos, pending.pos + nodeAtPos.nodeSize)
+
+              // Insert at current selection (mapped after deletion)
+              const mappedFrom = tr.mapping.map(from)
+              const mappedTo = tr.mapping.map(to)
+              const newNode = imageType.create({
+                src: images[0].src,
+                alt: images[0].alt,
+                title: images[0].title,
+              })
+
+              tr = tr.replaceRangeWith(mappedFrom, mappedTo, newNode)
+              tr = tr.setMeta(imageEnhancementsKey, { type: 'clearPendingMove' } satisfies ImageEnhancementsMeta)
+
+              view.dispatch(tr.scrollIntoView().setMeta('uiEvent', 'paste'))
+              event.preventDefault()
+              showToast('Image moved')
+              return true
+            }
+
+            // If original no longer exists, clear pending move and fall back to normal paste behavior.
+            view.dispatch(view.state.tr.setMeta(imageEnhancementsKey, { type: 'clearPendingMove' } satisfies ImageEnhancementsMeta))
+          }
+
           const nodes = images.flatMap((img, idx) => {
             const node = imageType.create({ src: img.src, alt: img.alt, title: img.title })
             const spacer = idx === images.length - 1 ? [] : [view.state.schema.text(' ')]
@@ -488,7 +601,7 @@ const imageSrcResolverPlugin = (getNotesDirectory: () => string | null) =>
           return true
         },
         nodeViews: {
-          image(node): NodeView {
+          image(node, view, getPos): NodeView {
             const img = document.createElement('img')
             img.dataset.brainpadImage = '1'
             img.draggable = false
@@ -555,17 +668,53 @@ const imageSrcResolverPlugin = (getNotesDirectory: () => string | null) =>
               }
             }
 
+            let currentAttrs = {
+              src: (node.attrs.src as string | undefined) ?? '',
+              alt: (node.attrs.alt as string | undefined) ?? '',
+              title: (node.attrs.title as string | undefined) ?? '',
+            }
+
             const onClick = (e: MouseEvent) => {
               e.preventDefault()
               e.stopPropagation()
 
-              const markdown = buildImageMarkdown({
-                src: node.attrs.src as string | undefined,
-                alt: node.attrs.alt as string | undefined,
-                title: node.attrs.title as string | undefined,
-              })
+              const markdown = buildImageMarkdown(currentAttrs)
 
-              openPopover(img.getBoundingClientRect(), markdown)
+              const onCopyRequested = async (input: HTMLInputElement) => {
+                try {
+                  await navigator.clipboard.writeText(markdown)
+                } catch {
+                  input.focus()
+                  input.select()
+                  try {
+                    document.execCommand('copy')
+                  } catch {
+                    // ignore
+                  }
+                }
+
+                const pos = typeof getPos === 'function' ? getPos() : null
+                const notePath = getNotePath()
+                if (typeof pos === 'number' && notePath) {
+                  view.dispatch(
+                    view.state.tr.setMeta(imageEnhancementsKey, {
+                      type: 'setPendingMove',
+                      pendingMove: {
+                        notePath,
+                        pos,
+                        attrs: currentAttrs,
+                        markdown,
+                      },
+                    } satisfies ImageEnhancementsMeta)
+                  )
+
+                  showToast('Image copied — paste to reposition (Esc to cancel)', 2600)
+                } else {
+                  showToast('Image copied')
+                }
+              }
+
+              openPopover(img.getBoundingClientRect(), markdown, onCopyRequested)
             }
 
             img.addEventListener('click', onClick)
@@ -584,11 +733,15 @@ const imageSrcResolverPlugin = (getNotesDirectory: () => string | null) =>
                 // Close popover when image updates (prevents stale markdown)
                 closePopover()
 
-                img.alt = (updatedNode.attrs.alt as string | undefined) ?? ''
-                if (typeof updatedNode.attrs.title === 'string') {
-                  img.title = updatedNode.attrs.title
+                currentAttrs = {
+                  src: (updatedNode.attrs.src as string | undefined) ?? '',
+                  alt: (updatedNode.attrs.alt as string | undefined) ?? '',
+                  title: (updatedNode.attrs.title as string | undefined) ?? '',
                 }
-                void setSrc((updatedNode.attrs.src as string | undefined) ?? '')
+
+                img.alt = currentAttrs.alt
+                img.title = currentAttrs.title
+                void setSrc(currentAttrs.src)
                 return true
               },
               destroy() {
@@ -603,12 +756,13 @@ const imageSrcResolverPlugin = (getNotesDirectory: () => string | null) =>
     })
   })
 
-export function MilkdownEditor({ content, onChange, notesDirectory, disabled }: MilkdownEditorProps) {
+export function MilkdownEditor({ content, onChange, notesDirectory, notePath, disabled }: MilkdownEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null)
   const editorInstanceRef = useRef<Editor | null>(null)
   const isUpdatingRef = useRef(false)
   const lastContentRef = useRef(content)
   const notesDirectoryRef = useRef<string | null>(notesDirectory)
+  const notePathRef = useRef<string | null>(notePath)
 
   // Note: we intentionally only create/destroy the editor when `disabled` flips.
   // Content changes are applied via `replaceAll` below.
@@ -628,7 +782,10 @@ export function MilkdownEditor({ content, onChange, notesDirectory, disabled }: 
       .use(exitCodeBlockPlugin)
       .use(trailingParagraphPlugin)
       .use(codeBlockLanguagePlugin)
-      .use(imageSrcResolverPlugin(() => notesDirectoryRef.current))
+      .use(imageSrcResolverPlugin(
+        () => notesDirectoryRef.current,
+        () => notePathRef.current,
+      ))
 
     editor.create().then((instance) => {
       editorInstanceRef.current = instance
@@ -654,10 +811,11 @@ export function MilkdownEditor({ content, onChange, notesDirectory, disabled }: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [disabled])
 
-  // Keep latest notes directory for image resolution + drag/drop.
+  // Keep latest notes directory + note path for image resolution and copy/paste move behavior.
   useEffect(() => {
     notesDirectoryRef.current = notesDirectory
-  }, [notesDirectory])
+    notePathRef.current = notePath
+  }, [notesDirectory, notePath])
 
   // Update content when switching notes (from parent)
   useEffect(() => {

@@ -161,6 +161,7 @@ function App() {
         onChange={updateNoteContent}
         disabled={!activeNote}
         notesDirectory={notesDirectory}
+        notePath={activeNote?.path ?? null}
       />
       {isSaving && <div className="save-indicator">Saving...</div>}
       {error && (
