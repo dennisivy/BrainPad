@@ -12,6 +12,8 @@
     "fs:allow-read-dir",
     "fs:allow-read-file",
     "fs:allow-exists",
+    "fs:allow-copy-file",
+    "fs:allow-mkdir",
     "fs:allow-home-write-recursive",
     "fs:allow-home-read-recursive",
     "fs:allow-desktop-write-recursive",
