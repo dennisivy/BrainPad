@@ -8,6 +8,7 @@ import { listener, listenerCtx } from '@milkdown/plugin-listener'
 import { prism } from '@milkdown/plugin-prism'
 import { Plugin, PluginKey, TextSelection } from '@milkdown/prose/state'
 import type { EditorView, NodeView } from '@milkdown/prose/view'
+import { Fragment, Slice } from '@milkdown/prose/model'
 
 import { getCurrentWebview } from '@tauri-apps/api/webview'
 import type { DragDropEvent } from '@tauri-apps/api/webview'
@@ -313,13 +314,185 @@ function mimeFromPath(path: string): string {
 
 const imageSrcResolverPlugin = (getNotesDirectory: () => string | null) =>
   $prose(() => {
+    const isFileDrop = (e: DragEvent) => {
+      const dt = e.dataTransfer
+      if (!dt) return false
+      if (dt.files && dt.files.length > 0) return true
+      if (dt.items) {
+        for (const item of Array.from(dt.items)) {
+          if (item.kind === 'file') return true
+        }
+      }
+      return false
+    }
+
+    const buildImageMarkdown = (attrs: { src?: string; alt?: string; title?: string }) => {
+      const src = attrs.src ?? ''
+      const alt = attrs.alt ?? ''
+      const title = attrs.title ?? ''
+
+      if (title) {
+        return `![${alt}](${src} "${title}")`
+      }
+
+      return `![${alt}](${src})`
+    }
+
+    const parseImagesFromText = (text: string) => {
+      // Minimal markdown image syntax parser for our copy/paste use-case.
+      // Matches: ![alt](src) and ![alt](src "title")
+      const re = /!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g
+      const matches: Array<{ alt: string; src: string; title: string }> = []
+
+      for (const m of text.matchAll(re)) {
+        matches.push({
+          alt: m[1] ?? '',
+          src: m[2] ?? '',
+          title: m[3] ?? '',
+        })
+      }
+
+      // Only convert when the pasted content is *just* image markdown + whitespace.
+      const remainder = text.replace(re, '').trim()
+      if (matches.length === 0 || remainder.length > 0) return null
+
+      return matches
+    }
+
+    // Popover state (single popover for the whole editor instance)
+    let popover: HTMLDivElement | null = null
+    let popoverCleanup: (() => void) | null = null
+
+    const closePopover = () => {
+      popoverCleanup?.()
+      popoverCleanup = null
+      popover?.remove()
+      popover = null
+    }
+
+    const openPopover = (rect: DOMRect, markdown: string) => {
+      closePopover()
+
+      const wrapper = document.createElement('div')
+      wrapper.className = 'image-markdown-popover'
+      wrapper.style.position = 'fixed'
+      wrapper.style.left = `${Math.min(rect.left, window.innerWidth - 340)}px`
+      wrapper.style.top = `${Math.min(rect.bottom + 8, window.innerHeight - 120)}px`
+
+      const input = document.createElement('input')
+      input.type = 'text'
+      input.readOnly = true
+      input.value = markdown
+      input.className = 'image-markdown-input'
+
+      const actions = document.createElement('div')
+      actions.className = 'image-markdown-actions'
+
+      const copyBtn = document.createElement('button')
+      copyBtn.type = 'button'
+      copyBtn.textContent = 'Copy'
+      copyBtn.className = 'image-markdown-copy'
+
+      actions.appendChild(copyBtn)
+      wrapper.appendChild(input)
+      wrapper.appendChild(actions)
+      document.body.appendChild(wrapper)
+
+      // Auto-select for easy copy
+      setTimeout(() => {
+        input.focus()
+        input.select()
+      }, 0)
+
+      const onDocMouseDown = (e: MouseEvent) => {
+        const target = e.target as Node | null
+        if (!target) return
+        if (wrapper.contains(target)) return
+        closePopover()
+      }
+
+      const onKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') closePopover()
+      }
+
+      const onCopy = async () => {
+        try {
+          await navigator.clipboard.writeText(markdown)
+        } catch {
+          input.focus()
+          input.select()
+          try {
+            document.execCommand('copy')
+          } catch {
+            // ignore
+          }
+        }
+      }
+
+      copyBtn.addEventListener('click', onCopy)
+      document.addEventListener('mousedown', onDocMouseDown)
+      window.addEventListener('keydown', onKeyDown)
+
+      popover = wrapper
+      popoverCleanup = () => {
+        copyBtn.removeEventListener('click', onCopy)
+        document.removeEventListener('mousedown', onDocMouseDown)
+        window.removeEventListener('keydown', onKeyDown)
+      }
+    }
+
     return new Plugin({
-      key: new PluginKey('image-src-resolver'),
+      key: new PluginKey('image-enhancements'),
       props: {
+        handleDOMEvents: {
+          // Block ProseMirror + webview default handling for OS file drops.
+          // Tauri will emit `onDragDropEvent` which we handle separately.
+          dragover(_view, event) {
+            const e = event as DragEvent
+            if (isFileDrop(e)) {
+              e.preventDefault()
+            }
+            return false
+          },
+          drop(_view, event) {
+            const e = event as DragEvent
+            if (isFileDrop(e)) {
+              e.preventDefault()
+              return true
+            }
+            return false
+          },
+        },
+        handlePaste(view, event) {
+          // Don’t transform paste inside code blocks.
+          if (view.state.selection.$from.parent.type.name === 'code_block') return false
+
+          const text = event.clipboardData?.getData('text/plain')
+          if (!text) return false
+
+          const images = parseImagesFromText(text)
+          if (!images) return false
+
+          const imageType = view.state.schema.nodes.image
+          if (!imageType) return false
+
+          const nodes = images.flatMap((img, idx) => {
+            const node = imageType.create({ src: img.src, alt: img.alt, title: img.title })
+            const spacer = idx === images.length - 1 ? [] : [view.state.schema.text(' ')]
+            return [node, ...spacer]
+          })
+
+          const slice = new Slice(Fragment.fromArray(nodes), 0, 0)
+          view.dispatch(view.state.tr.replaceSelection(slice).scrollIntoView().setMeta('uiEvent', 'paste'))
+          event.preventDefault()
+          return true
+        },
         nodeViews: {
           image(node): NodeView {
             const img = document.createElement('img')
+            img.dataset.brainpadImage = '1'
             img.draggable = false
+            img.style.cursor = 'pointer'
 
             let currentSrc: string | null = null
             let currentObjectUrl: string | null = null
@@ -360,7 +533,6 @@ const imageSrcResolverPlugin = (getNotesDirectory: () => string | null) =>
               } else if (isAbsoluteFilePath(src)) {
                 absPath = src
               } else {
-                // Unknown scheme; best effort.
                 img.src = src
                 return
               }
@@ -370,7 +542,6 @@ const imageSrcResolverPlugin = (getNotesDirectory: () => string | null) =>
                 const blob = new Blob([bytes], { type: mimeFromPath(absPath) })
                 const url = URL.createObjectURL(blob)
 
-                // If src changed while we were loading, discard.
                 if (token !== loadToken) {
                   URL.revokeObjectURL(url)
                   return
@@ -384,6 +555,21 @@ const imageSrcResolverPlugin = (getNotesDirectory: () => string | null) =>
               }
             }
 
+            const onClick = (e: MouseEvent) => {
+              e.preventDefault()
+              e.stopPropagation()
+
+              const markdown = buildImageMarkdown({
+                src: node.attrs.src as string | undefined,
+                alt: node.attrs.alt as string | undefined,
+                title: node.attrs.title as string | undefined,
+              })
+
+              openPopover(img.getBoundingClientRect(), markdown)
+            }
+
+            img.addEventListener('click', onClick)
+
             img.alt = (node.attrs.alt as string | undefined) ?? ''
             if (typeof node.attrs.title === 'string') {
               img.title = node.attrs.title
@@ -395,6 +581,9 @@ const imageSrcResolverPlugin = (getNotesDirectory: () => string | null) =>
               update(updatedNode) {
                 if (updatedNode.type !== node.type) return false
 
+                // Close popover when image updates (prevents stale markdown)
+                closePopover()
+
                 img.alt = (updatedNode.attrs.alt as string | undefined) ?? ''
                 if (typeof updatedNode.attrs.title === 'string') {
                   img.title = updatedNode.attrs.title
@@ -403,7 +592,9 @@ const imageSrcResolverPlugin = (getNotesDirectory: () => string | null) =>
                 return true
               },
               destroy() {
+                img.removeEventListener('click', onClick)
                 cleanupObjectUrl()
+                closePopover()
               }
             }
           },
@@ -481,25 +672,6 @@ export function MilkdownEditor({ content, onChange, notesDirectory, disabled }: 
     }
   }, [content])
 
-  useEffect(() => {
-    if (disabled) return
-
-    // Prevent the webview default drop behavior (e.g. opening the file).
-    const el = editorRef.current
-    if (!el) return
-
-    const prevent = (e: DragEvent) => {
-      e.preventDefault()
-    }
-
-    el.addEventListener('dragover', prevent)
-    el.addEventListener('drop', prevent)
-
-    return () => {
-      el.removeEventListener('dragover', prevent)
-      el.removeEventListener('drop', prevent)
-    }
-  }, [disabled])
 
   useEffect(() => {
     if (disabled) return
