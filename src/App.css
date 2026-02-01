@@ -129,6 +129,9 @@ html, body, #root {
   flex-direction: column;
   border-right: 1px solid #333;
   overflow: hidden;
+  /* Important for CSS grid/flex children: allow this column to shrink instead of
+     expanding horizontally when content has long unbroken lines. */
+  min-width: 0;
 }
 
 .editor-textarea {
@@ -576,10 +579,22 @@ button.large {
   background-color: #1e1e1e;
 }
 
+/* Milkdown mounts into the `.milkdown-editor` div (see `src/components/MilkdownEditor.tsx`).
+   Make it the scroll container so wide content can scroll horizontally. */
+.milkdown-editor {
+  flex: 1;
+  overflow: auto;
+  min-width: 0;
+}
+
+/* Some Milkdown themes add an inner `.milkdown` wrapper. Keep this for safety. */
 .milkdown-wrapper .milkdown {
   flex: 1;
-  overflow-y: auto;
+  /* Allow both vertical + horizontal scrolling when content is wider than the viewport. */
+  overflow: auto;
   padding: 20px;
+  /* Avoid forcing the grid column to grow wider than the viewport. */
+  min-width: 0;
 }
 
 .milkdown-wrapper .editor {
